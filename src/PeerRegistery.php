@@ -185,7 +185,7 @@ class PeerRegistery implements IPeerRegistery
         }
     }
 
-    protected function set(IPeer $peer): void
+    public function set(IPeer $peer): void
     {
         $this->ensureSwoolePeer($peer);
 
