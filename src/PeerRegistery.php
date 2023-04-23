@@ -3,6 +3,7 @@
 namespace YektaSmart\IotServer\Websocket;
 
 use dnj\AAA\Contracts\IUserManager;
+use Swoole\Server;
 use Swoole\Table;
 use YektaSmart\IotServer\Contracts\IClientPeer;
 use YektaSmart\IotServer\Contracts\IDevice;
@@ -15,10 +16,12 @@ use YektaSmart\IotServer\Websocket\Contracts\IPeer as ISwoolePeer;
 class PeerRegistery implements IPeerRegistery
 {
     protected Table $peers;
+    protected Server $swoole;
 
-    public function __construct(?Table $peersTable = null)
+    public function __construct(?Server $swoole = null, ?Table $peersTable = null)
     {
-        $this->peers = $peersTable ?? app('swoole')->peersTable;
+        $this->swoole = $swoole ?? app('swoole');
+        $this->peers = $peersTable ?? $this->swoole->peersTable;
     }
 
     public function add(IPeer $peer): void
@@ -49,9 +52,9 @@ class PeerRegistery implements IPeerRegistery
     public function firstDevice(int|IDevice $device): ?IDevicePeer
     {
         $device = Device::ensureId($device);
-        foreach ($this->peers as $data) {
-            if ($data['type'] === PeerType::DEVICE->value and $data['device_id'] === $device) {
-                return $this->buildPeer($data);
+        foreach ($this->all() as $peer) {
+            if ($peer instanceof IDevicePeer and $peer->getDeviceId() === $device) {
+                return $peer;
             }
         }
 
@@ -75,9 +78,9 @@ class PeerRegistery implements IPeerRegistery
     {
         $peers = [];
         $device = Device::ensureId($device);
-        foreach ($this->peers as $data) {
-            if ($data['type'] === PeerType::DEVICE->value and $data['device_id'] === $device) {
-                $peers[] = $this->buildPeer($data);
+        foreach ($this->all() as $peer) {
+            if ($peer instanceof IDevicePeer and $peer->getDeviceId() === $device) {
+                $peers[] = $peer;
             }
         }
 
@@ -87,6 +90,49 @@ class PeerRegistery implements IPeerRegistery
     public function hasDevice(int|IDevice $device): bool
     {
         return null !== $this->firstDevice($device);
+    }
+
+    public function firstClient(int|IDevice $device): ?IClientPeer
+    {
+        $device = Device::ensureId($device);
+        foreach ($this->all() as $peer) {
+            if ($peer instanceof IClientPeer and $peer->getDeviceId() === $device) {
+                return $peer;
+            }
+        }
+
+        return null;
+    }
+
+    public function firstClientOrFail(int|IDevice $device): IClientPeer
+    {
+        $p = $this->firstClient($device);
+        if (null === $p) {
+            throw new \Exception('Notfound');
+        }
+
+        return $p;
+    }
+
+    /**
+     * @return IClientPeer[]
+     */
+    public function getClients(int|IDevice $device): array
+    {
+        $peers = [];
+        $device = Device::ensureId($device);
+        foreach ($this->all() as $peer) {
+            if ($peer instanceof IClientPeer and $peer->getDeviceId() === $device) {
+                $peers[] = $peer;
+            }
+        }
+
+        return $peers;
+    }
+
+    public function hasClient(int|IDevice $device): bool
+    {
+        return null !== $this->firstClient($device);
     }
 
     public function has(IPeer|string $peer): bool
@@ -123,6 +169,20 @@ class PeerRegistery implements IPeerRegistery
         }
 
         return $this->peers->del($peer);
+    }
+
+    /**
+     * @return \Generator<IPeer>
+     */
+    public function all(): \Generator
+    {
+        foreach ($this->peers as $data) {
+            if (!$this->swoole->exists($data['fd'])) {
+                $this->peers->del($data['fd']);
+                continue;
+            }
+            yield $this->buildPeer($data);
+        }
     }
 
     protected function set(IPeer $peer): void

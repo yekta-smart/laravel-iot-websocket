@@ -2,8 +2,11 @@
 
 namespace YektaSmart\IotServer\Websocket\Tests\Feature;
 
+use dnj\AAA\Models\User;
 use Swoole\Table;
+use Swoole\WebSocket\Server;
 use YektaSmart\IotServer\Peer as IotServerPeer;
+use YektaSmart\IotServer\Websocket\ClientPeer;
 use YektaSmart\IotServer\Websocket\DevicePeer;
 use YektaSmart\IotServer\Websocket\Peer;
 use YektaSmart\IotServer\Websocket\PeerRegistery;
@@ -18,38 +21,63 @@ class PeerRegisteryTest extends TestCase
         $table->column('type', Table::TYPE_INT);
         $table->column('envelope', Table::TYPE_STRING, 128);
         $table->column('device_id', Table::TYPE_INT);
+        $table->column('user_id', Table::TYPE_INT);
         $table->create();
 
         return $table;
     }
 
+    public function buildRegistery(): PeerRegistery
+    {
+        /**
+         * @var mixed
+         */
+        $swoole = $this->createStub(Server::class);
+        $swoole->method('exists')->willReturn(true);
+
+        return new PeerRegistery($swoole, $this->setupTable());
+    }
+
     public function testAdd(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
-        $peer = new DevicePeer(1, 2);
-        $this->assertFalse($registery->has($peer));
+        $devicePeer = new DevicePeer(1, 2);
+        $this->assertFalse($registery->has($devicePeer));
         $this->assertFalse($registery->has(1));
-        $registery->add($peer);
-        $this->assertTrue($registery->has($peer));
+        $registery->add($devicePeer);
+        $this->assertTrue($registery->has($devicePeer));
         $this->assertTrue($registery->has(1));
         $this->assertTrue($registery->hasDevice(2));
 
+        $clientPeer = new ClientPeer(3, 2, User::factory()->create());
+        $this->assertFalse($registery->has($clientPeer));
+        $this->assertFalse($registery->has(3));
+        $registery->add($clientPeer);
+        $this->assertTrue($registery->has($clientPeer));
+        $this->assertTrue($registery->has(3));
+        $this->assertTrue($registery->hasClient(2));
+
         $this->assertNull($registery->firstDevice(10));
-        $this->assertEquals($peer, $registery->firstDevice(2));
+        $this->assertNull($registery->firstClient(10));
+        $this->assertEquals($devicePeer, $registery->firstDevice(2));
+        $this->assertEquals($clientPeer->getId(), $registery->firstClient(2)->getId());
         $this->assertEmpty($registery->byDevice(10));
+        $this->assertEmpty($registery->getClients(10));
         $this->assertCount(1, $registery->byDevice(2));
+        $this->assertCount(1, $registery->getClients(2));
 
         $this->assertNull($registery->find(10));
-        $this->assertEquals($peer, $registery->find(1));
+        $this->assertEquals($devicePeer, $registery->find(1));
+        $this->assertEquals($clientPeer->getId(), $registery->find(3)->getId());
 
         $this->expectException(\Exception::class);
-        $registery->add($peer);
+        $registery->add($devicePeer);
     }
 
     public function testRemove(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
         $peer = new DevicePeer(1, 2);
         $this->assertFalse($registery->has($peer));
@@ -63,7 +91,7 @@ class PeerRegisteryTest extends TestCase
 
     public function testFindOrFail(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
         $peer = new DevicePeer(1, 2);
         $registery->add($peer);
@@ -75,7 +103,7 @@ class PeerRegisteryTest extends TestCase
 
     public function testFirstDeviceOrFail(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
         $peer = new DevicePeer(1, 2);
         $registery->add($peer);
@@ -85,9 +113,23 @@ class PeerRegisteryTest extends TestCase
         $registery->firstDeviceOrFail(3);
     }
 
+    public function testFirstClientOrFail(): void
+    {
+        $registery = $this->buildRegistery();
+
+        $user = User::factory()->create();
+        $peer = new ClientPeer(1, 2, $user);
+        $registery->add($peer);
+        $this->assertSame($peer->getId(), $registery->firstClientOrFail(2)->getId());
+        $this->assertSame($user->id, $registery->firstClientOrFail(2)->getUser()->id);
+
+        $this->expectException(\Exception::class);
+        $registery->firstClientOrFail(3);
+    }
+
     public function testReplaceTwoUnidenticalPeers(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
         $peer1 = new DevicePeer(1, 2);
         $peer2 = new DevicePeer('10', 2);
@@ -98,7 +140,7 @@ class PeerRegisteryTest extends TestCase
 
     public function testReplaceUnpresentCurrentPeer(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
         $peer1 = new Peer(1);
         $peer2 = new DevicePeer(1, 2);
@@ -109,7 +151,7 @@ class PeerRegisteryTest extends TestCase
 
     public function testReplace(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
         $peer1 = new Peer(1);
         $peer2 = new DevicePeer(1, 2);
@@ -123,7 +165,7 @@ class PeerRegisteryTest extends TestCase
 
     public function testAddNonSwoolePeer(): void
     {
-        $registery = new PeerRegistery($this->setupTable());
+        $registery = $this->buildRegistery();
 
         $peer1 = new IotServerPeer(1);
 
