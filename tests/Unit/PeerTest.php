@@ -4,13 +4,16 @@ namespace YektaSmart\IotServer\Websocket\Tests\Unit;
 
 use Swoole\WebSocket\Server;
 use YektaSmart\IotServer\Websocket\Peer;
+use YektaSmart\IotServer\Websocket\Tests\Concerns\TestsSwoole;
 use YektaSmart\IotServer\Websocket\Tests\TestCase;
 
 class PeerTest extends TestCase
 {
+    use TestsSwoole;
+
     public function test(): void
     {
-        $p = new Peer(0);
+        $p = new Peer($this->getSwooleResolver(), 0);
         $this->assertSame(0, $p->getFd());
         $this->assertFalse($p->hasEnvelopeType());
         $p->setEnvelopeType(\stdClass::class);
@@ -20,7 +23,7 @@ class PeerTest extends TestCase
 
     public function testGetEnvelopeType(): void
     {
-        $p = new Peer(0);
+        $p = new Peer($this->getSwooleResolver(), 0);
         $this->expectException(\Exception::class);
         $p->getEnvelopeType();
     }
@@ -32,8 +35,7 @@ class PeerTest extends TestCase
             ->method('push')
             ->with(0, 'hi', SWOOLE_WEBSOCKET_OPCODE_BINARY)
             ->willReturn(true);
-        $this->app->singleton('swoole', fn () => $server);
-        $p = new Peer(0);
+        $p = new Peer(fn () => $server, 0);
         $p->send('hi');
     }
 
@@ -44,8 +46,7 @@ class PeerTest extends TestCase
             ->method('push')
             ->with(0, 'hi', SWOOLE_WEBSOCKET_OPCODE_BINARY)
             ->willReturn(false);
-        $this->app->singleton('swoole', fn () => $server);
-        $p = new Peer(0);
+        $p = new Peer(fn () => $server, 0);
 
         $this->expectException(\Exception::class);
         $p->send('hi');

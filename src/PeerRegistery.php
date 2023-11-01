@@ -3,7 +3,6 @@
 namespace YektaSmart\IotServer\Websocket;
 
 use dnj\AAA\Contracts\IUserManager;
-use Swoole\Server;
 use Swoole\Table;
 use YektaSmart\IotServer\Contracts\IClientPeer;
 use YektaSmart\IotServer\Contracts\IDevice;
@@ -11,17 +10,19 @@ use YektaSmart\IotServer\Contracts\IDevicePeer;
 use YektaSmart\IotServer\Contracts\IPeer;
 use YektaSmart\IotServer\Contracts\IPeerRegistery;
 use YektaSmart\IotServer\Models\Device;
+use YektaSmart\IotServer\Websocket\Concerns\WorksWithSwoole;
 use YektaSmart\IotServer\Websocket\Contracts\IPeer as ISwoolePeer;
 
 class PeerRegistery implements IPeerRegistery
 {
-    protected Table $peers;
-    protected Server $swoole;
+    use WorksWithSwoole;
 
-    public function __construct(?Server $swoole = null, ?Table $peersTable = null)
+    /**
+     * @param callable $swooleResolver
+     */
+    public function __construct($swooleResolver, protected Table $peers)
     {
-        $this->swoole = $swoole ?? app('swoole');
-        $this->peers = $peersTable ?? $this->swoole->peersTable;
+        $this->swooleResolver = $swooleResolver;
     }
 
     public function add(IPeer $peer): void
@@ -176,8 +177,9 @@ class PeerRegistery implements IPeerRegistery
      */
     public function all(): \Generator
     {
+        $swoole = $this->resolveSwoole();
         foreach ($this->peers as $data) {
-            if (!$this->swoole->exists($data['fd'])) {
+            if (!$swoole->exists($data['fd'])) {
                 $this->peers->del($data['fd']);
                 continue;
             }
@@ -206,14 +208,14 @@ class PeerRegistery implements IPeerRegistery
     {
         switch ($data['type']) {
             case PeerType::DEVICE->value:
-                $peer = new DevicePeer($data['fd'], $data['device_id']);
+                $peer = new DevicePeer($this->swooleResolver, $data['fd'], $data['device_id']);
                 break;
             case PeerType::CLIENT->value:
                 $user = app(IUserManager::class)->findOrFail($data['user_id']);
-                $peer = new ClientPeer($data['fd'], $data['device_id'], $user);
+                $peer = new ClientPeer($this->swooleResolver, $data['fd'], $data['device_id'], $user);
                 break;
             case PeerType::UNKNOWN->value:
-                $peer = new Peer($data['fd']);
+                $peer = new Peer($this->swooleResolver, $data['fd']);
                 break;
             default:
                 throw new \Exception('Unknown peer type in swoole table');

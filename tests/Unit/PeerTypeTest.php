@@ -11,7 +11,7 @@ class PeerTypeTest extends TestCase
 {
     public function test(): void
     {
-        $this->assertSame(PeerType::UNKNOWN, PeerType::fromPeer(new Peer(0)));
-        $this->assertSame(PeerType::DEVICE, PeerType::fromPeer(new DevicePeer(0, 1)));
+        $this->assertSame(PeerType::UNKNOWN, PeerType::fromPeer(new Peer(fn () => null, 0)));
+        $this->assertSame(PeerType::DEVICE, PeerType::fromPeer(new DevicePeer(fn () => null, 0, 1)));
     }
 }

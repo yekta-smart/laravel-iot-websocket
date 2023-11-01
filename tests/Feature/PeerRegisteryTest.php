@@ -4,16 +4,18 @@ namespace YektaSmart\IotServer\Websocket\Tests\Feature;
 
 use dnj\AAA\Models\User;
 use Swoole\Table;
-use Swoole\WebSocket\Server;
 use YektaSmart\IotServer\Peer as IotServerPeer;
 use YektaSmart\IotServer\Websocket\ClientPeer;
 use YektaSmart\IotServer\Websocket\DevicePeer;
 use YektaSmart\IotServer\Websocket\Peer;
 use YektaSmart\IotServer\Websocket\PeerRegistery;
+use YektaSmart\IotServer\Websocket\Tests\Concerns\TestsSwoole;
 use YektaSmart\IotServer\Websocket\Tests\TestCase;
 
 class PeerRegisteryTest extends TestCase
 {
+    use TestsSwoole;
+
     public function setupTable(): Table
     {
         $table = new Table(1024);
@@ -29,20 +31,14 @@ class PeerRegisteryTest extends TestCase
 
     public function buildRegistery(): PeerRegistery
     {
-        /**
-         * @var mixed
-         */
-        $swoole = $this->createStub(Server::class);
-        $swoole->method('exists')->willReturn(true);
-
-        return new PeerRegistery($swoole, $this->setupTable());
+        return new PeerRegistery($this->getSwooleResolver(), $this->setupTable());
     }
 
     public function testAdd(): void
     {
         $registery = $this->buildRegistery();
 
-        $devicePeer = new DevicePeer(1, 2);
+        $devicePeer = new DevicePeer($this->getSwooleResolver(), 1, 2);
         $this->assertFalse($registery->has($devicePeer));
         $this->assertFalse($registery->has(1));
         $registery->add($devicePeer);
@@ -50,7 +46,7 @@ class PeerRegisteryTest extends TestCase
         $this->assertTrue($registery->has(1));
         $this->assertTrue($registery->hasDevice(2));
 
-        $clientPeer = new ClientPeer(3, 2, User::factory()->create());
+        $clientPeer = new ClientPeer($this->getSwooleResolver(), 3, 2, User::factory()->create());
         $this->assertFalse($registery->has($clientPeer));
         $this->assertFalse($registery->has(3));
         $registery->add($clientPeer);
@@ -79,7 +75,7 @@ class PeerRegisteryTest extends TestCase
     {
         $registery = $this->buildRegistery();
 
-        $peer = new DevicePeer(1, 2);
+        $peer = new DevicePeer($this->getSwooleResolver(), 1, 2);
         $this->assertFalse($registery->has($peer));
         $registery->add($peer);
         $this->assertTrue($registery->has($peer));
@@ -93,7 +89,7 @@ class PeerRegisteryTest extends TestCase
     {
         $registery = $this->buildRegistery();
 
-        $peer = new DevicePeer(1, 2);
+        $peer = new DevicePeer($this->getSwooleResolver(), 1, 2);
         $registery->add($peer);
         $this->assertEquals($peer, $registery->findOrFail(1));
 
@@ -105,7 +101,7 @@ class PeerRegisteryTest extends TestCase
     {
         $registery = $this->buildRegistery();
 
-        $peer = new DevicePeer(1, 2);
+        $peer = new DevicePeer($this->getSwooleResolver(), 1, 2);
         $registery->add($peer);
         $this->assertEquals($peer, $registery->firstDeviceOrFail(2));
 
@@ -118,7 +114,7 @@ class PeerRegisteryTest extends TestCase
         $registery = $this->buildRegistery();
 
         $user = User::factory()->create();
-        $peer = new ClientPeer(1, 2, $user);
+        $peer = new ClientPeer($this->getSwooleResolver(), 1, 2, $user);
         $registery->add($peer);
         $this->assertSame($peer->getId(), $registery->firstClientOrFail(2)->getId());
         $this->assertSame($user->id, $registery->firstClientOrFail(2)->getUser()->id);
@@ -131,8 +127,8 @@ class PeerRegisteryTest extends TestCase
     {
         $registery = $this->buildRegistery();
 
-        $peer1 = new DevicePeer(1, 2);
-        $peer2 = new DevicePeer('10', 2);
+        $peer1 = new DevicePeer($this->getSwooleResolver(), 1, 2);
+        $peer2 = new DevicePeer($this->getSwooleResolver(), '10', 2);
 
         $this->expectException(\Exception::class);
         $registery->replace($peer1, $peer2);
@@ -142,8 +138,8 @@ class PeerRegisteryTest extends TestCase
     {
         $registery = $this->buildRegistery();
 
-        $peer1 = new Peer(1);
-        $peer2 = new DevicePeer(1, 2);
+        $peer1 = new Peer($this->getSwooleResolver(), 1);
+        $peer2 = new DevicePeer($this->getSwooleResolver(), 1, 2);
 
         $this->expectException(\Exception::class);
         $registery->replace($peer1, $peer2);
@@ -153,8 +149,8 @@ class PeerRegisteryTest extends TestCase
     {
         $registery = $this->buildRegistery();
 
-        $peer1 = new Peer(1);
-        $peer2 = new DevicePeer(1, 2);
+        $peer1 = new Peer($this->getSwooleResolver(), 1);
+        $peer2 = new DevicePeer($this->getSwooleResolver(), 1, 2);
 
         $registery->add($peer1);
         $this->assertEquals($peer1, $registery->findOrFail(1));

@@ -4,13 +4,20 @@ namespace YektaSmart\IotServer\Websocket;
 
 use YektaSmart\IotServer\Contracts\IPeerRegistery;
 use YektaSmart\IotServer\Peer as IotServerPeer;
+use YektaSmart\IotServer\Websocket\Concerns\WorksWithSwoole;
 use YektaSmart\IotServer\Websocket\Contracts\IPeer;
 
 class Peer extends IotServerPeer implements IPeer
 {
-    public function __construct(protected int $fd)
+    use WorksWithSwoole;
+
+    /**
+     * @param callable():\Swoole\WebSocket\Server $swooleResolver
+     */
+    public function __construct($swooleResolver, protected int $fd)
     {
         parent::__construct($fd);
+        $this->swooleResolver = $swooleResolver;
     }
 
     public function getFd(): int
@@ -20,12 +27,7 @@ class Peer extends IotServerPeer implements IPeer
 
     public function send(string $data): void
     {
-        /**
-         * @var \Swoole\WebSocket\Server $swoole
-         */
-        $swoole = app('swoole');
-
-        if (!$swoole->push($this->fd, $data, SWOOLE_WEBSOCKET_OPCODE_BINARY)) {
+        if (!$this->resolveSwoole()->push($this->fd, $data, SWOOLE_WEBSOCKET_OPCODE_BINARY)) {
             throw new \Exception();
         }
     }

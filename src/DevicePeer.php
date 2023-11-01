@@ -6,9 +6,12 @@ use YektaSmart\IotServer\Websocket\Contracts\IDevicePeer;
 
 class DevicePeer extends Peer implements IDevicePeer
 {
-    public function __construct(int $fd, protected int $deviceId)
+    /**
+     * @param callable():\Swoole\WebSocket\Server $swooleResolver
+     */
+    public function __construct($swooleResolver, int $fd, protected int $deviceId)
     {
-        parent::__construct($fd);
+        parent::__construct($swooleResolver, $fd);
     }
 
     public function getDeviceId(): int

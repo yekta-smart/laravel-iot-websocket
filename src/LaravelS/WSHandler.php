@@ -1,6 +1,6 @@
 <?php
 
-namespace YektaSmart\IotServer\Websocket;
+namespace YektaSmart\IotServer\Websocket\LaravelS;
 
 use dnj\AAA\Contracts\IUser;
 use Hhxsv5\LaravelS\Swoole\WebSocketHandlerInterface;
@@ -14,9 +14,14 @@ use Swoole\WebSocket\Server;
 use YektaSmart\IotServer\Contracts\IDeviceManager;
 use YektaSmart\IotServer\Contracts\IPeerRegistery;
 use YektaSmart\IotServer\Contracts\IPostOffice;
+use YektaSmart\IotServer\Websocket\ClientPeer;
+use YektaSmart\IotServer\Websocket\Concerns\WorksWithSwoole;
+use YektaSmart\IotServer\Websocket\Peer;
 
 class WSHandler implements WebSocketHandlerInterface
 {
+    use WorksWithSwoole;
+
     protected IPostOffice $postOffice;
     protected IPeerRegistery $peerRegistery;
 
@@ -24,16 +29,12 @@ class WSHandler implements WebSocketHandlerInterface
     {
         $this->peerRegistery = app(IPeerRegistery::class);
         $this->postOffice = app(IPostOffice::class);
+        $this->swooleResolver = fn () => app('swoole');
     }
 
     public function trySendBinaryForFd(int $fd, string $data): bool
     {
-        /**
-         * @var \Swoole\WebSocket\Server $swoole
-         */
-        $swoole = app('swoole');
-
-        return $swoole->push($fd, $data, SWOOLE_WEBSOCKET_OPCODE_BINARY);
+        return $this->resolveSwoole()->push($fd, $data, SWOOLE_WEBSOCKET_OPCODE_BINARY);
     }
 
     public function sendBinaryForFd(int $fd, string $data): void
@@ -134,10 +135,10 @@ class WSHandler implements WebSocketHandlerInterface
 
                 return;
             }
-            $peer = new ClientPeer($swooleRequest->fd, $device->getId(), $user);
+            $peer = new ClientPeer($this->swooleResolver, $swooleRequest->fd, $device->getId(), $user);
         }
         if (!isset($peer)) {
-            $peer = new Peer($swooleRequest->fd);
+            $peer = new Peer($this->swooleResolver, $swooleRequest->fd);
         }
         $this->peerRegistery->add($peer);
     }
